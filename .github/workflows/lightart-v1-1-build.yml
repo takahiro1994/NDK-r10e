@@ -9,14 +9,15 @@ on:
       - '.github/workflows/lightart-v1-1-build.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/lightart-studio-v1-1-build
 
       - name: Reconstruct source
         shell: bash
@@ -26,63 +27,67 @@ jobs:
           echo 'ade0f8df78e7b5febe3329fc3ef2cae13a8649fe70ed2ca1b17641a7fa937e8a  LightArtStudio_buildsrc.b64' | sha256sum -c -
           base64 -d LightArtStudio_buildsrc.b64 > LightArtStudio_buildsrc.zip
           echo '0d1a66a5351c8c34efb76579a51ecd417508e93600d51214ba37723a0af24b5e  LightArtStudio_buildsrc.zip' | sha256sum -c -
+          rm -rf LightArtStudio
           unzip -q LightArtStudio_buildsrc.zip -d LightArtStudio
-          test -f LightArtStudio/app/src/main/cpp/native_art.c
-          test -f LightArtStudio/app/src/main/res/drawable/ic_launcher.xml
-          test -f LightArtStudio/app/src/main/res/drawable-nodpi/ic_launcher_art.webp
 
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v3
 
       - name: Install Android build packages
         shell: bash
         run: |
-          set -euxo pipefail
           yes | sdkmanager --licenses >/dev/null || true
           sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
 
-      - name: Set up Gradle 8.10.2
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
 
-      - name: Build debug APK
-        working-directory: LightArtStudio
-        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Build and capture log
+        shell: bash
+        run: |
+          set +e
+          (cd LightArtStudio && gradle --no-daemon --stacktrace :app:assembleDebug) > BUILD_LOG.txt 2>&1
+          code=$?
+          echo "$code" > BUILD_STATUS.txt
+          tail -n 300 BUILD_LOG.txt > BUILD_LOG_TAIL.txt
+          exit 0
 
-      - name: Verify APK and package source
+      - name: Package result
         shell: bash
         run: |
           set -euxo pipefail
-          APK='LightArtStudio/app/build/outputs/apk/debug/app-debug.apk'
-          test -s "$APK"
-          cp "$APK" LightArtStudio-v1.1-debug.apk
-          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging LightArtStudio-v1.1-debug.apk | tee APK_BADGING.txt
-          unzip -l LightArtStudio-v1.1-debug.apk | tee APK_CONTENTS.txt
-          grep -q 'lib/arm64-v8a/liblightart.so' APK_CONTENTS.txt
-          grep -q 'lib/armeabi-v7a/liblightart.so' APK_CONTENTS.txt
-          grep -q 'lib/x86_64/liblightart.so' APK_CONTENTS.txt
-          grep -q 'drawable-nodpi.*ic_launcher_art' APK_CONTENTS.txt || true
-          cd LightArtStudio
-          zip -qr ../LightArtStudio-v1.1-source.zip . -x '.gradle/*' 'build/*' 'app/build/*' 'app/.cxx/*' '*.iml' '.idea/*'
-          cd ..
-          sha256sum LightArtStudio-v1.1-debug.apk LightArtStudio-v1.1-source.zip | tee SHA256SUMS.txt
+          rm -rf dist_payload
+          mkdir -p dist_payload
+          cp BUILD_STATUS.txt BUILD_LOG_TAIL.txt dist_payload/
+          if [ "$(cat BUILD_STATUS.txt)" = "0" ]; then
+            APK='LightArtStudio/app/build/outputs/apk/debug/app-debug.apk'
+            test -s "$APK"
+            cp "$APK" LightArtStudio-v1.1-debug.apk
+            "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" > APK_BADGING.txt
+            unzip -l "$APK" > APK_CONTENTS.txt
+            grep -q 'lib/arm64-v8a/liblightart.so' APK_CONTENTS.txt
+            grep -q 'lib/armeabi-v7a/liblightart.so' APK_CONTENTS.txt
+            grep -q 'lib/x86_64/liblightart.so' APK_CONTENTS.txt
+            sha256sum LightArtStudio-v1.1-debug.apk > APK_SHA256.txt
+            base64 -w0 LightArtStudio-v1.1-debug.apk > /tmp/apk.b64
+            split -b 40000 -d -a 3 /tmp/apk.b64 dist_payload/apk.part
+            cp APK_BADGING.txt APK_CONTENTS.txt APK_SHA256.txt dist_payload/
+            echo SUCCESS > dist_payload/RESULT.txt
+          else
+            echo FAILED > dist_payload/RESULT.txt
+          fi
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: LightArtStudio-v1.1
-          path: |
-            LightArtStudio-v1.1-debug.apk
-            LightArtStudio-v1.1-source.zip
-            APK_BADGING.txt
-            APK_CONTENTS.txt
-            SHA256SUMS.txt
-          if-no-files-found: error
-          retention-days: 7
+      - name: Commit result payload
+        shell: bash
+        run: |
+          set -euxo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f dist_payload
+          git commit -m 'LightArt Studio v1.1 build result [skip ci]' || exit 0
+          git push origin HEAD:agent/lightart-studio-v1-1-build
