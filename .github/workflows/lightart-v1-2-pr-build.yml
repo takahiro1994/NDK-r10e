@@ -12,17 +12,24 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Reconstruct and verify source archive
+      - name: Reconstruct verified v1.1 base and apply v1.2 overlay
         shell: bash
         run: |
           set -euxo pipefail
-          cat lightart_v12_payload/part00 lightart_v12_payload/part01 lightart_v12_payload/part02 lightart_v12_payload/part03 lightart_v12_payload/part04 lightart_v12_payload/part05 lightart_v12_payload/part06 lightart_v12_payload/part07 lightart_v12_payload/part08 > source.b64
-          echo 'e0b263daffcdfb3504065658dc545e036f6ec7ef25a614b6e7401b3917acf344  source.b64' | sha256sum -c -
-          base64 -d source.b64 > LightArtStudio-v1.2-source.zip
-          echo 'eb681b9d391dd3645b95365403dc004a8da24844612c6c67858356fc8e1e7e64  LightArtStudio-v1.2-source.zip' | sha256sum -c -
-          unzip -q LightArtStudio-v1.2-source.zip -d LightArtStudio
-          test -f LightArtStudio/app/src/main/cpp/native_art.c
-          test -f LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          cat lightart_payload/part00 lightart_payload/part01 lightart_payload/part02 lightart_payload/part03.0 lightart_payload/part03.1 lightart_payload/part03.2 lightart_payload/part03.3 lightart_payload/part03.4.0 lightart_payload/part03.4.1 lightart_payload/part03.4.2 lightart_payload/part03.4.3 lightart_payload/part03.4.4 lightart_payload/tail > base.b64
+          echo 'ade0f8df78e7b5febe3329fc3ef2cae13a8649fe70ed2ca1b17641a7fa937e8a  base.b64' | sha256sum -c -
+          base64 -d base.b64 > base.zip
+          echo '0d1a66a5351c8c34efb76579a51ecd417508e93600d51214ba37723a0af24b5e  base.zip' | sha256sum -c -
+          unzip -q base.zip -d LightArtStudio
+          cp v12_overlay/BUILD_NOTES.md LightArtStudio/BUILD_NOTES.md
+          cp v12_overlay/README.md LightArtStudio/README.md
+          cp v12_overlay/app_build.gradle LightArtStudio/app/build.gradle
+          cp v12_overlay/ArtGLSurfaceView.java LightArtStudio/app/src/main/java/com/xperiatk/lightart/ArtGLSurfaceView.java
+          cp v12_overlay/MainActivity.java LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          cp v12_overlay/ProjectStore.java LightArtStudio/app/src/main/java/com/xperiatk/lightart/ProjectStore.java
+          grep -q "versionName '1.2'" LightArtStudio/app/build.gradle
+          grep -q '画面のみ' LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          grep -q 'Organic Ribbon' LightArtStudio/app/src/main/java/com/xperiatk/lightart/ProjectStore.java
           test -f LightArtStudio/app/src/main/res/drawable-nodpi/ic_launcher_art.webp
       - uses: actions/setup-java@v4
         with:
