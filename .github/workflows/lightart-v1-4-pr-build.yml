@@ -28,7 +28,7 @@ jobs:
           echo 'd9cefd553516addfd3d2261b83230b431c355f4e8f05a67a56159f0e04608349  v13_overlay.zip' | sha256sum -c -
           unzip -oq v13_overlay.zip -d LightArtStudio
           cat v14_parts/part0 v14_parts/part1 v14_parts/part2 v14_parts/part3 v14_parts/part4 > v14_overlay.b64
-          echo '2a318173f9b67057ccf9c66ee30c56aadf02a1ef58b0879819dabf2d5060f078  v14_overlay.b64' | sha256sum -c -
+          echo '65a1003f477066d5168cfe09878f1e2cfd742709d4be2a4701bed5004b1a0a6d  v14_overlay.b64' | sha256sum -c -
           base64 -d v14_overlay.b64 > v14_overlay.zip
           echo '03e3a0423084cbafd59f41530209fffb8592ffe43a0dc168b372b686a94f4e29  v14_overlay.zip' | sha256sum -c -
           unzip -oq v14_overlay.zip -d LightArtStudio
