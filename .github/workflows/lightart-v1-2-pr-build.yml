@@ -12,10 +12,13 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: Verify source archive
+      - name: Reconstruct and verify source archive
         shell: bash
         run: |
           set -euxo pipefail
+          cat lightart_v12_payload/part00 lightart_v12_payload/part01 lightart_v12_payload/part02 lightart_v12_payload/part03 lightart_v12_payload/part04 lightart_v12_payload/part05 lightart_v12_payload/part06 lightart_v12_payload/part07 lightart_v12_payload/part08 > source.b64
+          echo 'e0b263daffcdfb3504065658dc545e036f6ec7ef25a614b6e7401b3917acf344  source.b64' | sha256sum -c -
+          base64 -d source.b64 > LightArtStudio-v1.2-source.zip
           echo 'eb681b9d391dd3645b95365403dc004a8da24844612c6c67858356fc8e1e7e64  LightArtStudio-v1.2-source.zip' | sha256sum -c -
           unzip -q LightArtStudio-v1.2-source.zip -d LightArtStudio
           test -f LightArtStudio/app/src/main/cpp/native_art.c
