@@ -16,7 +16,7 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          cat lightart_payload/part00 lightart_payload/part01 lightart_payload/part02 lightart_payload/part03.0 lightart_payload/part03.1 lightart_payload/part03.2 lightart_payload/part03.3 lightart_payload/part03.4 lightart_payload/tail > src.b64
+          cat lightart_payload/part00 lightart_payload/part01 lightart_payload/part02 lightart_payload/part03.0 lightart_payload/part03.1 lightart_payload/part03.2 lightart_payload/part03.3 lightart_payload/part03.4.0 lightart_payload/part03.4.1 lightart_payload/part03.4.2 lightart_payload/part03.4.3 lightart_payload/part03.4.4 lightart_payload/tail > src.b64
           echo 'ade0f8df78e7b5febe3329fc3ef2cae13a8649fe70ed2ca1b17641a7fa937e8a  src.b64' | sha256sum -c -
           base64 -d src.b64 > source.zip
           echo '0d1a66a5351c8c34efb76579a51ecd417508e93600d51214ba37723a0af24b5e  source.zip' | sha256sum -c -
