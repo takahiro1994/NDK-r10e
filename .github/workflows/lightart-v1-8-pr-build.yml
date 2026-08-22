@@ -1,0 +1,122 @@
+name: Temporary LightArt Studio v1.8 PR Build
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct verified v1.6 base and apply exact v1.8 overlay
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat v15_payload/part00a v15_payload/part00b v15_payload/part01 v15_payload/part02 v15_payload/part03 v15_payload/part04 v15_payload/part05 v15_payload/part06 v15_payload/part07 v15_payload/part08 > v15_source.b64
+          echo 'bf175c4236c56e8ab7738a3e7bd9d750903266114c7134efe6776255f2005f5d  v15_source.b64' | sha256sum -c -
+          base64 -d v15_source.b64 > v15_source.zip
+          echo 'eb3c603786e6bb8cbb94a41b0ee20320df8d81bcefb442f2c74766772fa982c8  v15_source.zip' | sha256sum -c -
+          mkdir LightArtStudio
+          unzip -q v15_source.zip -d LightArtStudio
+          cp v15_overlay/ScriptWebView.java LightArtStudio/app/src/main/java/com/xperiatk/lightart/ScriptWebView.java
+
+          cat v16_payload/part00 v16_payload/part01 v16_payload/part02 v16_payload/part03 v16_payload/part04 v16_payload/part05 v16_payload/part06 v16_payload/part07 > v16_overlay.b64
+          echo '466e6027d7bdeb9df0927632fedc46f3c5bc73c1ffef61c5c668740dc1f84476  v16_overlay.b64' | sha256sum -c -
+          base64 -d v16_overlay.b64 > v16_overlay.zip
+          echo '0343ebd05bdd0b2f531f9fffbf1afbf650e4660830a3dbd9fa2f6a0b3928d334  v16_overlay.zip' | sha256sum -c -
+          unzip -oq v16_overlay.zip -d LightArtStudio
+
+          cat v18_payload/part0 v18_payload/part1 > v18_overlay.b64
+          echo '8b0cb339ad576c9612aa7e27e3c9b5464206fd0b1c4b5637aa299324a5e2105f  v18_overlay.b64' | sha256sum -c -
+          base64 -d v18_overlay.b64 > v18_overlay.zip
+          echo 'c3ae268660549f84f61545cc0d34eb620297cc4f0cd85d7bd93a47ba703d2f71  v18_overlay.zip' | sha256sum -c -
+          unzip -oq v18_overlay.zip -d LightArtStudio
+
+          grep -q 'versionCode 9' LightArtStudio/app/build.gradle
+          grep -q "versionName '1.8'" LightArtStudio/app/build.gradle
+          grep -q 'orientation|screenSize|keyboardHidden' LightArtStudio/app/src/main/AndroidManifest.xml
+          grep -q '表示方向' LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          grep -q '描画解像度' LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          grep -q 'preferredAspectRatio' LightArtStudio/app/src/main/java/com/xperiatk/lightart/ScriptRuntime.java
+          grep -q 'manualScale' LightArtStudio/app/src/main/java/com/xperiatk/lightart/ScriptWebView.java
+          grep -q '__laSetRenderScale' LightArtStudio/app/src/main/java/com/xperiatk/lightart/ScriptWebView.java
+
+      - name: Bundle runtime assets
+        shell: bash
+        run: |
+          set -euxo pipefail
+          mkdir -p LightArtStudio/app/src/main/assets
+          curl -fL --retry 5 --retry-delay 2 'https://cdn.jsdelivr.net/npm/p5@2.3.2/lib/p5.min.js' -o LightArtStudio/app/src/main/assets/p5.min.js
+          curl -fL --retry 5 --retry-delay 2 'https://cdn.jsdelivr.net/npm/p5@2.3.2/lib/p5.webgpu.min.js' -o LightArtStudio/app/src/main/assets/p5.webgpu.min.js
+          echo '87adc350e8ec0e9bced22d4f03c181bdd208dc997d3956ab3ec2e90537643c9a  LightArtStudio/app/src/main/assets/p5.min.js' | sha256sum -c -
+          echo 'd563c26b4c0d9eae35899ebb7ceb1ffe0708b317b0ff0ab633a4a395b571342c  LightArtStudio/app/src/main/assets/p5.webgpu.min.js' | sha256sum -c -
+          curl -fL --retry 5 --retry-delay 2 'https://raw.githubusercontent.com/doxas/twigl/fc09f1ecee8219b83bd1777844edb22a29d19ad2/src/shader_snippet/noise.glsl' -o LightArtStudio/app/src/main/assets/twigl_noise.glsl
+          test -s LightArtStudio/app/src/main/assets/twigl_noise.glsl
+          cat > LightArtStudio/BUILD_NOTES.md <<'EOF'
+          # v1.8 build notes
+          - Playback defaults to the script orientation, with manual Script / Portrait / Landscape selection.
+          - Player content is always aspect-fit and centered; forcing a landscape work into portrait uses the portrait width as the maximum while preserving the original aspect ratio.
+          - GLSL render resolution supports Auto / 100% / 85% / 70% / 55% / 40%.
+          - Auto keeps the adaptive 3MP cap and performance scaling. Manual modes disable the adaptive cap and use the selected DPR multiplier directly.
+          - versionCode 9 / versionName 1.8.
+          - Same fixed development signing key as v1.3-v1.7.
+          EOF
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build APK
+        working-directory: LightArtStudio
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify and package
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK=LightArtStudio/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          cp "$APK" LightArtStudio-v1.8-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | tee APK_BADGING.txt
+          unzip -l "$APK" | tee APK_CONTENTS.txt
+          keytool -printcert -jarfile "$APK" | tee APK_CERT.txt
+          grep -q "versionCode='9'" APK_BADGING.txt
+          grep -q "versionName='1.8'" APK_BADGING.txt
+          grep -q 'assets/p5.min.js' APK_CONTENTS.txt
+          grep -q 'assets/p5.webgpu.min.js' APK_CONTENTS.txt
+          grep -q 'assets/twigl_noise.glsl' APK_CONTENTS.txt
+          grep -q 'lib/arm64-v8a/liblightart.so' APK_CONTENTS.txt
+          grep -q 'lib/armeabi-v7a/liblightart.so' APK_CONTENTS.txt
+          grep -q 'lib/x86_64/liblightart.so' APK_CONTENTS.txt
+          grep -q 'B0:C4:1E:9F:00:80:18:3D:96:20:93:84:4C:B5:8E:FE:6E:3C:1D:20:2A:E2:A1:00:1A:55:1B:58:FF:BE:6B:52' APK_CERT.txt
+          cd LightArtStudio
+          zip -qr ../LightArtStudio-v1.8-source-built.zip . -x '.gradle/*' 'build/*' 'app/build/*' 'app/.cxx/*' '*.iml' '.idea/*'
+          cd ..
+          sha256sum LightArtStudio-v1.8-debug.apk LightArtStudio-v1.8-source-built.zip > SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LightArtStudio-v1.8
+          path: |
+            LightArtStudio-v1.8-debug.apk
+            LightArtStudio-v1.8-source-built.zip
+            APK_BADGING.txt
+            APK_CONTENTS.txt
+            APK_CERT.txt
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
