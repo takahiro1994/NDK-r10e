@@ -1,0 +1,91 @@
+name: Temporary LightArt Studio v1.4 PR Build
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconstruct v1.3 base and apply v1.4 overlay
+        shell: bash
+        run: |
+          set -euxo pipefail
+          cat lightart_payload/part00 lightart_payload/part01 lightart_payload/part02 lightart_payload/part03.0 lightart_payload/part03.1 lightart_payload/part03.2 lightart_payload/part03.3 lightart_payload/part03.4.0 lightart_payload/part03.4.1 lightart_payload/part03.4.2 lightart_payload/part03.4.3 lightart_payload/part03.4.4 lightart_payload/tail > base.b64
+          echo 'ade0f8df78e7b5febe3329fc3ef2cae13a8649fe70ed2ca1b17641a7fa937e8a  base.b64' | sha256sum -c -
+          base64 -d base.b64 > base.zip
+          echo '0d1a66a5351c8c34efb76579a51ecd417508e93600d51214ba37723a0af24b5e  base.zip' | sha256sum -c -
+          unzip -q base.zip -d LightArtStudio
+          cp v12_overlay/ArtGLSurfaceView.java LightArtStudio/app/src/main/java/com/xperiatk/lightart/ArtGLSurfaceView.java
+          cp v12_overlay/ProjectStore.java LightArtStudio/app/src/main/java/com/xperiatk/lightart/ProjectStore.java
+          base64 -d v13_overlay.zip.b64 > v13_overlay.zip
+          echo 'd9cefd553516addfd3d2261b83230b431c355f4e8f05a67a56159f0e04608349  v13_overlay.zip' | sha256sum -c -
+          unzip -oq v13_overlay.zip -d LightArtStudio
+          base64 -d v14_overlay.zip.b64 > v14_overlay.zip
+          echo '03e3a0423084cbafd59f41530209fffb8592ffe43a0dc168b372b686a94f4e29  v14_overlay.zip' | sha256sum -c -
+          unzip -oq v14_overlay.zip -d LightArtStudio
+          grep -q "versionCode 5" LightArtStudio/app/build.gradle
+          grep -q "versionName '1.4'" LightArtStudio/app/build.gradle
+          ! grep -q 'タップで再生' LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          test -s LightArtStudio/signing/lightart-dev.jks
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Build APK
+        working-directory: LightArtStudio
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Verify APK, version, ABIs and fixed signer
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK=LightArtStudio/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          cp "$APK" LightArtStudio-v1.4-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | tee APK_BADGING.txt
+          unzip -l "$APK" | tee APK_CONTENTS.txt
+          keytool -printcert -jarfile "$APK" | tee APK_CERT.txt
+          grep -q "versionCode='5'" APK_BADGING.txt
+          grep -q "versionName='1.4'" APK_BADGING.txt
+          grep -q 'lib/arm64-v8a/liblightart.so' APK_CONTENTS.txt
+          grep -q 'lib/armeabi-v7a/liblightart.so' APK_CONTENTS.txt
+          grep -q 'lib/x86_64/liblightart.so' APK_CONTENTS.txt
+          grep -q 'B0:C4:1E:9F:00:80:18:3D:96:20:93:84:4C:B5:8E:FE:6E:3C:1D:20:2A:E2:A1:00:1A:55:1B:58:FF:BE:6B:52' APK_CERT.txt
+          cd LightArtStudio
+          zip -qr ../LightArtStudio-v1.4-source-built.zip . -x '.gradle/*' 'build/*' 'app/build/*' 'app/.cxx/*' '*.iml' '.idea/*'
+          cd ..
+          sha256sum LightArtStudio-v1.4-debug.apk LightArtStudio-v1.4-source-built.zip > SHA256SUMS.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LightArtStudio-v1.4
+          path: |
+            LightArtStudio-v1.4-debug.apk
+            LightArtStudio-v1.4-source-built.zip
+            APK_BADGING.txt
+            APK_CONTENTS.txt
+            APK_CERT.txt
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
