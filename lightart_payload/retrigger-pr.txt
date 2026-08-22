@@ -1,1 +1,1 @@
-LightArt Studio v1.1 PR build trigger 2026-08-22
+LightArt Studio v1.1 PR build trigger 2026-08-22 attempt 2
