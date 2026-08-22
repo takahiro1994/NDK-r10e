@@ -27,7 +27,9 @@ jobs:
           base64 -d v13_overlay.zip.b64 > v13_overlay.zip
           echo 'd9cefd553516addfd3d2261b83230b431c355f4e8f05a67a56159f0e04608349  v13_overlay.zip' | sha256sum -c -
           unzip -oq v13_overlay.zip -d LightArtStudio
-          base64 -d v14_overlay.zip.b64 > v14_overlay.zip
+          cat v14_parts/part0 v14_parts/part1 v14_parts/part2 v14_parts/part3 v14_parts/part4 > v14_overlay.b64
+          echo '2a318173f9b67057ccf9c66ee30c56aadf02a1ef58b0879819dabf2d5060f078  v14_overlay.b64' | sha256sum -c -
+          base64 -d v14_overlay.b64 > v14_overlay.zip
           echo '03e3a0423084cbafd59f41530209fffb8592ffe43a0dc168b372b686a94f4e29  v14_overlay.zip' | sha256sum -c -
           unzip -oq v14_overlay.zip -d LightArtStudio
           grep -q "versionCode 5" LightArtStudio/app/build.gradle
