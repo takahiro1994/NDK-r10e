@@ -1,0 +1,67 @@
+name: Temporary LightArt Studio v1.2 PR Build
+
+on:
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source archive
+        shell: bash
+        run: |
+          set -euxo pipefail
+          echo 'eb681b9d391dd3645b95365403dc004a8da24844612c6c67858356fc8e1e7e64  LightArtStudio-v1.2-source.zip' | sha256sum -c -
+          unzip -q LightArtStudio-v1.2-source.zip -d LightArtStudio
+          test -f LightArtStudio/app/src/main/cpp/native_art.c
+          test -f LightArtStudio/app/src/main/java/com/xperiatk/lightart/MainActivity.java
+          test -f LightArtStudio/app/src/main/res/drawable-nodpi/ic_launcher_art.webp
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Install Android packages
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.0.12077973' 'cmake;3.22.1'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+      - name: Build APK
+        working-directory: LightArtStudio
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Verify outputs
+        shell: bash
+        run: |
+          set -euxo pipefail
+          APK=LightArtStudio/app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          cp "$APK" LightArtStudio-v1.2-debug.apk
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" dump badging "$APK" | tee APK_BADGING.txt
+          unzip -l "$APK" | tee APK_CONTENTS.txt
+          grep -q "versionName='1.2'" APK_BADGING.txt
+          grep -q 'lib/arm64-v8a/liblightart.so' APK_CONTENTS.txt
+          grep -q 'lib/armeabi-v7a/liblightart.so' APK_CONTENTS.txt
+          grep -q 'lib/x86_64/liblightart.so' APK_CONTENTS.txt
+          cd LightArtStudio
+          zip -qr ../LightArtStudio-v1.2-source-built.zip . -x '.gradle/*' 'build/*' 'app/build/*' 'app/.cxx/*' '*.iml' '.idea/*'
+          cd ..
+          sha256sum LightArtStudio-v1.2-debug.apk LightArtStudio-v1.2-source-built.zip > SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LightArtStudio-v1.2
+          path: |
+            LightArtStudio-v1.2-debug.apk
+            LightArtStudio-v1.2-source-built.zip
+            APK_BADGING.txt
+            APK_CONTENTS.txt
+            SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 7
